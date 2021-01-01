@@ -12,12 +12,11 @@ impl SpinLock {
   }
 
   pub unsafe fn lock(&self) {
-    while self.flag.compare_exchange(
-      false,
-      true,
-      Ordering::Relaxed,
-      Ordering::Relaxed
-    ).unwrap() {
+    while self
+      .flag
+      .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+      .unwrap()
+    {
       // NOTE: add spin_loop(); here once it becomes stable
     }
     fence(Ordering::Acquire);
