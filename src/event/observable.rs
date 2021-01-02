@@ -7,17 +7,20 @@ use super::subscription::Subscription;
 use crate::sync::threadpool::Task;
 use log::warn;
 
+use std::fmt::Debug;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock, Weak};
 
-pub trait ObservableType: Send + Sync + Clone + 'static {}
+pub trait ObservableType: Send + Sync + Clone + Debug + 'static {}
 
-impl<T> ObservableType for T where T: Send + Sync + Clone + 'static {}
+impl<T> ObservableType for T where T: Send + Sync + Clone + Debug + 'static {}
 
 pub(super) trait Owner: Send + Sync {
   fn id(&self) -> usize;
   fn finish(&self);
-  fn finished(&self) -> bool { false }
+  fn finished(&self) -> bool {
+    false
+  }
   fn scheduler(&self) -> Arc<dyn Scheduler>;
   fn add_finalize(&self, task: Task);
   fn handle(&self, signal: Signal);
@@ -351,11 +354,15 @@ where
   }
 
   fn finish(&self) {
-    if !self
-      .finished
-      .compare_and_swap(false, true, Ordering::Relaxed)
-    {
-      self.pipeable.read().unwrap().finalize();
+    if let Ok(last) = self.finished.compare_exchange(
+      false,
+      true,
+      Ordering::Relaxed,
+      Ordering::Relaxed,
+    ) {
+      if !last {
+        self.pipeable.read().unwrap().finalize();
+      }
     }
   }
 
@@ -412,7 +419,9 @@ pub(super) fn id() -> usize {
 }
 
 enum ObservableStrategy<T>
-where T: ObservableType {
+where
+  T: ObservableType,
+{
   Of(Vec<T>),
   Merge(Vec<Arc<Observable<T>>>),
 }
@@ -445,7 +454,7 @@ where
   pub fn merge(list: Vec<Arc<Observable<T>>>) -> Self {
     ObservableBuilder {
       scheduler: SchedulerType::Worker,
-      dispatcher: DispatcherType::Replay(list.len()),
+      dispatcher: DispatcherType::Basic,
       strategy: ObservableStrategy::Merge(list),
     }
   }
@@ -462,14 +471,12 @@ where
 
   pub fn build(self) -> Arc<Observable<T>> {
     let id = id();
-    let scheduler = 
-      make_scheduler("observable".to_owned(), id, self.scheduler);
+    let scheduler = make_scheduler("observable".to_owned(), id, self.scheduler);
     let dispatcher = super::dispatcher::create(self.dispatcher);
     match self.strategy {
       ObservableStrategy::Of(list) => {
-        let observable = Observable::new(
-          id, None, dispatcher, scheduler.clone(),
-        );
+        let observable =
+          Observable::new(id, None, dispatcher, scheduler.clone());
         for x in list.iter() {
           let value = x.clone();
           let cloned = observable.clone();
@@ -478,7 +485,7 @@ where
           }));
         }
         observable
-      },
+      }
       ObservableStrategy::Merge(owners) => {
         Funnel::new(owners, id, scheduler, dispatcher).1
       }
@@ -516,10 +523,10 @@ where
 
   /// Constructs an observable which receives a merged stream from a given list
   /// of observables
-  /// 
+  ///
   /// `merge` creates a funnel operator chaining all the parent observers into
   /// the resulting observable.
-  /// 
+  ///
   /// # Example
   /// ```
   /// # drumbeat::utils::testing::async_context(|| {
@@ -527,13 +534,13 @@ where
   /// use drumbeat::event::ops::*;
   /// use std::sync::atomic::{AtomicU32, Ordering};
   /// use std::sync::Arc;
-  /// 
+  ///
   /// let sum = Arc::new(AtomicU32::new(0));
-  /// 
+  ///
   /// let a = Observable::of(vec![1, 2, 3, 4]);
   /// let b = Observable::of(vec![10, 20, 30, 40]);
   /// let c = Observable::of(vec![100, 200, 300, 400]);
-  /// 
+  ///
   /// let capture = sum.clone();
   /// let rx = Observable::merge(vec![a, b, c])
   ///   .pipe()
@@ -542,7 +549,7 @@ where
   ///     capture.fetch_add(x, Ordering::Relaxed);
   ///   })
   ///   .collect();
-  /// 
+  ///
   /// assert_eq!(rx.recv().unwrap().iter().sum::<u32>(), 1110);
   /// assert_eq!(sum.load(Ordering::Relaxed), 1110);
   /// # });
@@ -647,16 +654,22 @@ where
 }
 
 pub struct Funnel<T>
-where T: ObservableType {
+where
+  T: ObservableType,
+{
   id: usize,
   owners: Vec<Weak<dyn Owner>>,
   target: RwLock<Option<Arc<Observable<T>>>>,
   finished: AtomicBool,
 }
 
-impl <T> Owner for Funnel<T>
-where T: ObservableType {
-  fn id(&self) -> usize { self.id }
+impl<T> Owner for Funnel<T>
+where
+  T: ObservableType,
+{
+  fn id(&self) -> usize {
+    self.id
+  }
 
   fn finish(&self) {
     for owner in self.owners.iter() {
@@ -683,47 +696,57 @@ where T: ObservableType {
   }
 
   fn handle(&self, signal: Signal) {
-    match signal {
-      Signal::Recycle(_) => self.recycle(None),
-      _ => (),
+    if let Signal::Recycle(_) = signal {
+      self.recycle(None);
     }
   }
 
   fn owner(&self) -> Option<Arc<dyn Owner>> {
-    self.owners.iter().map(|x| x.upgrade()).find(|x| x.is_some())?
+    self
+      .owners
+      .iter()
+      .map(|x| x.upgrade())
+      .find(|x| x.is_some())?
   }
 }
 
-impl <T> Funnel<T>
-where T: ObservableType {
-  pub(super) fn new<'a>(
+impl<T> Funnel<T>
+where
+  T: ObservableType,
+{
+  pub(super) fn new(
     owners: Vec<Arc<Observable<T>>>,
     child_id: usize,
     scheduler: Arc<dyn Scheduler>,
-    dispatcher: Box<dyn Dispatcher<T>>
+    dispatcher: Box<dyn Dispatcher<T>>,
   ) -> (Arc<Self>, Arc<Observable<T>>) {
-    let downgrade =
-      owners.iter().map(|x| Arc::downgrade(&x) as Weak<dyn Owner>).collect();
+    let downgrade = owners
+      .iter()
+      .map(|x| Arc::downgrade(&x) as Weak<dyn Owner>)
+      .collect();
     let funnel = Arc::new(Funnel {
       id: id(),
       owners: downgrade,
       target: RwLock::new(None),
       finished: AtomicBool::new(false),
     });
-    let observable = Observable::new(
-      child_id, Some(funnel.clone()), dispatcher, scheduler
-    );
+    let observable =
+      Observable::new(child_id, Some(funnel.clone()), dispatcher, scheduler);
     *funnel.target.write().unwrap() = Some(observable.clone());
     for owner in owners.iter() {
       let capture = funnel.clone();
       let owner_weak = Arc::downgrade(owner);
-      owner.pipeable.write().unwrap().add_child(DispatchTarget::new(
-        funnel.clone(),
-        Invoker::new(Arc::new(move |x| {
-          capture.next(x, owner_weak.clone());
-          Signal::None
-        }))
-      ));
+      owner
+        .pipeable
+        .write()
+        .unwrap()
+        .add_child(DispatchTarget::new(
+          funnel.clone(),
+          Invoker::new(Arc::new(move |x| {
+            capture.next(x, owner_weak.clone());
+            Signal::None
+          })),
+        ));
     }
     (funnel, observable)
   }
@@ -742,7 +765,9 @@ where T: ObservableType {
   pub(super) fn recycle(&self, caller: Option<Weak<dyn Owner>>) {
     self.finish();
     let id = caller
-      .map(|caller| caller.upgrade()).unwrap_or(None).map(|caller| caller.id());
+      .map(|caller| caller.upgrade())
+      .unwrap_or(None)
+      .map(|caller| caller.id());
     for owner in self.owners.iter() {
       if let Some(owner) = owner.upgrade() {
         let not_same = id.map(|id| id != owner.id());
@@ -800,13 +825,16 @@ mod test {
     crate::utils::testing::async_context(|| {
       let (funnel, _into) = {
         let observables: Vec<Arc<Observable<()>>> = vec![
-          Observable::of(vec![]), Observable::of(vec![]), Observable::of(vec![])
+          Observable::of(vec![]),
+          Observable::of(vec![]),
+          Observable::of(vec![]),
         ];
         let (funnel, into) = {
           let (funnel, observable) = Funnel::new(
-            observables.clone(), id(),
+            observables.clone(),
+            id(),
             Arc::new(crate::event::scheduler::Blocking {}),
-            crate::event::dispatcher::create(DispatcherType::Basic)
+            crate::event::dispatcher::create(DispatcherType::Basic),
           );
           assert_eq!(funnel.owners.len(), 3);
           (Arc::downgrade(&funnel), observable)
@@ -825,13 +853,16 @@ mod test {
   fn funnel_target_unsubscribe_test() {
     crate::utils::testing::async_context(|| {
       let observables: Vec<Arc<Observable<()>>> = vec![
-        Observable::of(vec![]), Observable::of(vec![]), Observable::of(vec![])
+        Observable::of(vec![]),
+        Observable::of(vec![]),
+        Observable::of(vec![]),
       ];
       let (funnel, into) = {
         let (funnel, observable) = Funnel::new(
-          observables.clone(), id(),
+          observables.clone(),
+          id(),
           Arc::new(crate::event::scheduler::Blocking {}),
-          crate::event::dispatcher::create(DispatcherType::Basic)
+          crate::event::dispatcher::create(DispatcherType::Basic),
         );
         assert_eq!(funnel.owners.len(), 3);
         (Arc::downgrade(&funnel), observable)

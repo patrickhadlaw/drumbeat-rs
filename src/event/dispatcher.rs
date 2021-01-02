@@ -4,8 +4,8 @@ use super::observable::{
 use crate::sync::buffer::RingBuffer;
 use crate::sync::threadpool::Task;
 
-use std::slice::Iter;
 use std::collections::VecDeque;
+use std::slice::Iter;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 

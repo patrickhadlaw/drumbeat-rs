@@ -3,8 +3,8 @@ use super::observable::{Observable, ObservableType, Owner, Pipe, Signal};
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::Receiver;
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::RecvTimeoutError;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 pub trait Map<A, B>
@@ -170,15 +170,22 @@ where
       .pipe()
       .first()
       .tap(move |_| {
-        if !closed.compare_and_swap(false, true, Ordering::Relaxed) {
-          use super::scheduler::{Runtime, Scheduler};
-          use crate::sync::threadpool::Task;
-          let runtime = Runtime {};
-          let next = next.clone();
-          let notify_to = notify_to.clone();
-          runtime.execute(Task::new(move || {
-            next.write().unwrap().remove_child(notify_to.id());
-          }));
+        if let Ok(last) = closed.compare_exchange(
+          false,
+          true,
+          Ordering::Relaxed,
+          Ordering::Relaxed,
+        ) {
+          if !last {
+            use super::scheduler::{Runtime, Scheduler};
+            use crate::sync::threadpool::Task;
+            let runtime = Runtime {};
+            let next = next.clone();
+            let notify_to = notify_to.clone();
+            runtime.execute(Task::new(move || {
+              next.write().unwrap().remove_child(notify_to.id());
+            }));
+          }
         }
       })
       .observe();
@@ -243,10 +250,17 @@ where
         observable,
         Invoker::new(Arc::new(move |x| {
           let good = predicate(x.clone());
-          if !finished.compare_and_swap(false, !good, Ordering::Relaxed) {
-            cloned.next(x);
-            if !good {
-              return Signal::Recycle(cloned.id());
+          if let Ok(last) = finished.compare_exchange(
+            false,
+            !good,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+          ) {
+            if !last {
+              cloned.next(x);
+              if !good {
+                return Signal::Recycle(cloned.id());
+              }
             }
           }
           Signal::None
@@ -586,7 +600,10 @@ where
   }
 
   fn debounce_for(&mut self, duration: Duration) -> Pipe<T> {
-    enum DebounceCommand<T> { Value(T), Finish }
+    enum DebounceCommand<T> {
+      Value(T),
+      Finish,
+    }
     let observable = self.make_observer();
     let captured = observable.clone();
     let connected = Arc::new(AtomicBool::new(true));
@@ -595,7 +612,11 @@ where
     let (tx, rx) = std::sync::mpsc::channel();
     let finalize = Mutex::new(tx.clone());
     self.finalize(move || {
-      finalize.lock().unwrap().send(DebounceCommand::Finish).unwrap();
+      finalize
+        .lock()
+        .unwrap()
+        .send(DebounceCommand::Finish)
+        .unwrap();
     });
     let rx = Mutex::new(rx);
     worker.submit(move || {
@@ -617,7 +638,7 @@ where
                   wait_for = duration - last_time.elapsed().unwrap();
                 }
               }
-            },
+            }
             RecvTimeoutError::Disconnected => break,
           }
         } else {
@@ -634,14 +655,14 @@ where
               } else {
                 duration - elapsed
               }
-            },
-            DebounceCommand::Finish => break
+            }
+            DebounceCommand::Finish => break,
           }
         }
       }
       cloned.store(false, Ordering::Relaxed);
     });
-    let tx = Mutex::new(tx.clone());
+    let tx = Mutex::new(tx);
     self.attach(
       observable.clone(),
       DispatchTarget::new(
@@ -652,8 +673,8 @@ where
             tx.lock().unwrap().send(DebounceCommand::Value(x)).unwrap();
           }
           Signal::None
-        }))
-      )
+        })),
+      ),
     )
   }
 }
