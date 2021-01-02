@@ -27,7 +27,7 @@ jobs:
       run: cargo check --verbose
 
     - name: Test
-      run: cargo test --verbose
+      run: cargo test --verbose -- --nocapture
 
     - name: Lint
       run: cargo clippy --verbose -- -D warnings
