@@ -1,7 +1,7 @@
 [package]
 name = "drumbeat"
 version = "0.1.0"
-description = "A Rust to GLSL/SPIR-V compiler framework. The goal of this crate is to allow creation of GLSL shaders written in pure rust within a crate."
+description = "An event handling system aimed towards real-time applications such as GUIs and Game Engines."
 authors = ["Patrick Hadlaw <patrickhadlaw@gmail.com>"]
 repository = "https://github.com/patrickhadlaw/drumbeat-rs"
 license-file = "LICENSE"
