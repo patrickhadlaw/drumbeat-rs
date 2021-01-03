@@ -104,9 +104,11 @@ impl Drop for Worker {
       .send(WorkerSignal::Close)
       .unwrap();
     if let Some(handle) = self.handle.take() {
-      handle
-        .join()
-        .expect("expected worker thread to join gracefully");
+      if std::thread::current().id() != handle.thread().id() {
+        handle
+          .join()
+          .expect("expected worker thread to join gracefully");
+      }
     }
   }
 }
