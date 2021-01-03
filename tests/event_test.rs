@@ -9,7 +9,6 @@ use std::sync::{Arc, Mutex};
 
 #[test]
 fn simple_event_test() {
-  println!("START simple_event_test");
   testing::async_context(|| {
     let basic = BasicSubject::new();
     let finalize = Arc::new(AtomicBool::new(false));
@@ -32,12 +31,10 @@ fn simple_event_test() {
     }
     assert_eq!(finalize.load(Ordering::Relaxed), true);
   });
-  println!("END simple_event_test");
 }
 
 #[test]
 fn take_observable_of_test() {
-  println!("START take_observable_of_test");
   testing::async_context(|| {
     let sum = Arc::new(AtomicI32::new(0));
     let subscribe_sum = sum.clone();
@@ -61,12 +58,10 @@ fn take_observable_of_test() {
       assert_eq!(rx.recv().unwrap(), 6);
     }
   });
-  println!("END take_observable_of_test");
 }
 
 #[test]
 fn first_subject_test() {
-  println!("START first_subject_test");
   testing::async_context(|| {
     let sum = Arc::new(AtomicI32::new(0));
     let subscribe_sum = sum.clone();
@@ -94,12 +89,10 @@ fn first_subject_test() {
     }
     assert_eq!(rx.recv().unwrap(), 5);
   });
-  println!("END first_subject_test");
 }
 
 #[test]
 fn map_event_to_string_test() {
-  println!("START map_event_to_string_test");
   testing::async_context(|| {
     let subject = BasicSubject::new();
     let rx = subject
@@ -115,12 +108,10 @@ fn map_event_to_string_test() {
     result.sort();
     assert_eq!(result, ["abc_", "def_", "ghi_"]);
   });
-  println!("END map_event_to_string_test");
 }
 
 #[test]
 fn complex_pipe_test() {
-  println!("START complex_pipe_test");
   testing::async_context(|| {
     let subject = BasicSubjectBuilder::new()
       .scheduler(SchedulerType::Worker)
@@ -138,12 +129,10 @@ fn complex_pipe_test() {
     subject.next("CCC".to_owned());
     assert_eq!(rx.recv().unwrap(), ["CCC_"]);
   });
-  println!("END complex_pipe_test");
 }
 
 #[test]
 fn multi_observable_test() {
-  println!("START multi_observable_test");
   testing::async_context(|| {
     let subject = BasicSubjectBuilder::new()
       .scheduler(SchedulerType::Worker)
@@ -182,5 +171,4 @@ fn multi_observable_test() {
     list.lock().unwrap().sort();
     assert_eq!(*list.lock().unwrap(), ["A+", "B+", "C+"]);
   });
-  println!("END multi_observable_test");
 }
