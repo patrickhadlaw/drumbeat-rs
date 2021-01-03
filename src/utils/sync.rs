@@ -9,6 +9,12 @@ pub fn kill_process_on_panic() {
     } else {
       "unknown"
     };
+    if !log::log_enabled!(log::Level::Error) {
+      println!(
+        "unhandled panic on thread '{}' with info: '{}'",
+        name, panic_info
+      );
+    }
     log::error!(
       "unhandled panic on thread '{}' with info: '{}'",
       name,
