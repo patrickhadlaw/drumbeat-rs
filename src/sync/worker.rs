@@ -1,13 +1,13 @@
-use super::task::{TaskType, Task, TaskError};
 use super::executor::Executor;
+use super::task::{Task, TaskError, TaskType};
 
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::future::Future;
 
-pub type WorkerResult<T> = Result<T, TaskError>; 
+pub type WorkerResult<T> = Result<T, TaskError>;
 
 // panic if submit on non healthy worker
 
@@ -20,7 +20,7 @@ where
   receiver: &'a Receiver<WorkerSignal<T>>,
 }
 
-impl <'a, T> Drop for HealthUnwinder<'a, T>
+impl<'a, T> Drop for HealthUnwinder<'a, T>
 where
   T: TaskType,
 {
@@ -64,7 +64,7 @@ where
   inner: Arc<WorkerInner<T>>,
 }
 
-impl <T> Default for Worker<T>
+impl<T> Default for Worker<T>
 where
   T: TaskType,
 {
@@ -73,7 +73,7 @@ where
   }
 }
 
-impl <T> Worker<T>
+impl<T> Worker<T>
 where
   T: TaskType,
 {
@@ -97,11 +97,7 @@ where
     Self::default()
   }
 
-  fn run(
-    receiver: Receiver<WorkerSignal<T>>,
-    queued: Arc<AtomicIsize>,
-    healthy: Arc<AtomicBool>
-  ) -> JoinHandle<()> {
+  fn run(receiver: Receiver<WorkerSignal<T>>, queued: Arc<AtomicIsize>, healthy: Arc<AtomicBool>) -> JoinHandle<()> {
     static mut ID: AtomicUsize = AtomicUsize::new(0);
     let id = unsafe { ID.fetch_add(1, Ordering::Relaxed) };
     std::thread::Builder::new()
@@ -130,9 +126,9 @@ where
   /// - Tasks are guaranteed to be run as long as the worker remains healthy, when the `Worker` instance is
   /// dropped the dropping thread signals the worker to close. Once the worker
   /// receives this signal it quits its thread loop.
-  /// 
+  ///
   /// # Panics
-  /// 
+  ///
   /// Panics if the worker is unhealthy.
   ///
   /// # Example
@@ -165,7 +161,7 @@ where
   }
 }
 
-impl <T> WorkerInner<T>
+impl<T> WorkerInner<T>
 where
   T: TaskType,
 {
@@ -184,49 +180,27 @@ where
   }
 }
 
-impl <T> Executor for Worker<T>
+impl<T> Executor for Worker<T>
 where
   T: TaskType,
 {
   type Output = T;
   fn execute(&self, future: impl Future<Output = Self::Output> + Send + 'static) -> Arc<Task<Self::Output>> {
     let cloned = self.inner.clone();
-    let task = Arc::new(Task::new(move |task| { cloned.enqueue(task, true) }, Box::pin(future)));
+    let task = Arc::new(Task::new(move |task| cloned.enqueue(task, true), Box::pin(future)));
     self.inner.enqueue(task.clone(), false);
     task
   }
 }
 
-impl <T> Drop for Worker<T>
-where T: TaskType {
+impl<T> Drop for Worker<T>
+where
+  T: TaskType,
+{
   fn drop(&mut self) {
-    let _ = self
-      .inner
-      .sender
-      .lock()
-      .unwrap()
-      .send(WorkerSignal::Close);
+    let _ = self.inner.sender.lock().unwrap().send(WorkerSignal::Close);
   }
 }
-
-// pub struct WorkerHandle {
-//   worker: Arc<Worker>,
-//   pool: Weak<Pool>,
-// }
-
-// pub struct Pool {
-//   workers: RwLock<Vec<Arc<Worker>>>,
-//   available: RwLock<Vec<usize>>,
-// }
-
-// impl Pool {
-//   pub fn new() -> Self {
-//     Pool {
-//       workers: RwLock::new(Vec::new()),
-//       available: RwLock::new(Vec::new()),
-//     }
-//   }
-// }
 
 #[cfg(test)]
 mod test {
@@ -260,7 +234,7 @@ mod test {
   #[should_panic]
   fn worker_unhealthy_task_test() {
     let (worker, handle) = Worker::<()>::new_with_handle();
-    let task = worker.submit(async || { panic!() });
+    let task = worker.submit(async || panic!());
     worker.inner.sender.lock().unwrap().send(WorkerSignal::Close).unwrap();
     assert!(handle.join().is_err());
     assert_eq!(task.poll(), Ok(()));

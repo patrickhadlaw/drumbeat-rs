@@ -44,11 +44,7 @@ where
     }
   }
 
-  unsafe fn get_critical(
-    &self,
-    guard: &SpinLockGuard<'_, RingBufferInner<T>>,
-    num: usize
-  ) -> Vec<T> {
+  unsafe fn get_critical(&self, guard: &SpinLockGuard<'_, RingBufferInner<T>>, num: usize) -> Vec<T> {
     let mut result = Vec::new();
     result.reserve(num);
     let fetch = (if num < self.size { num } else { self.size }) as isize;

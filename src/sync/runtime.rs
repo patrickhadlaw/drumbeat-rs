@@ -8,8 +8,7 @@ pub struct Runtime;
 impl Runtime {
   fn get() -> Arc<ThreadPool> {
     lazy_static! {
-      static ref POOL: Arc<ThreadPool> =
-        Arc::new(ThreadPoolBuilder::named("runtime".to_owned()).build());
+      static ref POOL: Arc<ThreadPool> = Arc::new(ThreadPoolBuilder::named("runtime".to_owned()).build());
     }
     POOL.clone()
   }

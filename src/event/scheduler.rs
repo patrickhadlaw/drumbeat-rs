@@ -18,7 +18,7 @@ pub trait Scheduler: Send + Sync {
 
 impl Scheduler for Worker {
   fn execute(&self, task: Task) {
-    self.submit(async move || { task.invoke() });
+    self.submit(async move || task.invoke());
   }
 
   fn scheduler_type(&self) -> SchedulerType {
@@ -60,16 +60,10 @@ impl Scheduler for Blocking {
   }
 }
 
-pub(super) fn make_scheduler(
-  name: String,
-  id: usize,
-  strategy: SchedulerType,
-) -> Arc<dyn Scheduler> {
+pub(super) fn make_scheduler(name: String, id: usize, strategy: SchedulerType) -> Arc<dyn Scheduler> {
   match strategy {
     SchedulerType::Worker => Arc::new(Worker::new()),
-    SchedulerType::Pool => {
-      Arc::new(ThreadPoolBuilder::named(format!("{}{}", name, id)).build())
-    }
+    SchedulerType::Pool => Arc::new(ThreadPoolBuilder::named(format!("{}{}", name, id)).build()),
     SchedulerType::Runtime => Arc::new(Runtime {}),
     SchedulerType::Blocking => Arc::new(Blocking {}),
   }

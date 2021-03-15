@@ -1,11 +1,11 @@
 use super::spinlock::SpinLock;
 
 use std::error::Error;
-use std::sync::Arc;
-use std::task::{Context, Poll, Waker, Wake};
 use std::fmt::{Debug, Display, Formatter};
-use std::pin::Pin;
 use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll, Wake, Waker};
 
 pub trait TaskType: Send + Clone + 'static {}
 impl<T> TaskType for T where T: Send + Clone + 'static {}
@@ -34,7 +34,7 @@ where
   pub(super) future: Option<Pin<Box<dyn Future<Output = T> + Send>>>,
 }
 
-impl <T> Wake for Task<T>
+impl<T> Wake for Task<T>
 where
   T: TaskType,
 {
@@ -57,7 +57,7 @@ pub enum PollError {
   Error(TaskError),
 }
 
-impl <T> Task<T>
+impl<T> Task<T>
 where
   T: TaskType,
 {

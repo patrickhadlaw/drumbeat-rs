@@ -50,10 +50,7 @@ fn take_observable_of_test() {
           subscribe_sum.fetch_add(x, Ordering::Relaxed);
         })
         .finalize(move || {
-          tx.lock()
-            .unwrap()
-            .send(finalize_sum.load(Ordering::Relaxed))
-            .unwrap();
+          tx.lock().unwrap().send(finalize_sum.load(Ordering::Relaxed)).unwrap();
         });
       assert_eq!(rx.recv().unwrap(), 6);
     }
@@ -68,9 +65,7 @@ fn first_subject_test() {
     let finalize_sum = sum.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     let tx = Mutex::new(tx.clone());
-    let subject = BasicSubjectBuilder::new()
-      .scheduler(SchedulerType::Blocking)
-      .build();
+    let subject = BasicSubjectBuilder::new().scheduler(SchedulerType::Blocking).build();
     {
       let _subscription = subject
         .observe()
@@ -80,10 +75,7 @@ fn first_subject_test() {
           subscribe_sum.fetch_add(x, Ordering::Relaxed);
         })
         .finalize(move || {
-          tx.lock()
-            .unwrap()
-            .send(finalize_sum.load(Ordering::Relaxed))
-            .unwrap();
+          tx.lock().unwrap().send(finalize_sum.load(Ordering::Relaxed)).unwrap();
         });
       subject.next(5)
     }
@@ -95,12 +87,7 @@ fn first_subject_test() {
 fn map_event_to_string_test() {
   testing::async_context(|| {
     let subject = BasicSubject::new();
-    let rx = subject
-      .observe()
-      .pipe()
-      .take(3)
-      .map(|x| format!("{}_", x))
-      .collect();
+    let rx = subject.observe().pipe().take(3).map(|x| format!("{}_", x)).collect();
     subject.next("abc");
     subject.next("def");
     subject.next("ghi");
@@ -134,12 +121,8 @@ fn complex_pipe_test() {
 #[test]
 fn multi_observable_test() {
   testing::async_context(|| {
-    let subject = BasicSubjectBuilder::new()
-      .scheduler(SchedulerType::Worker)
-      .build();
-    let done = BasicSubjectBuilder::new()
-      .scheduler(SchedulerType::Blocking)
-      .build();
+    let subject = BasicSubjectBuilder::new().scheduler(SchedulerType::Worker).build();
+    let done = BasicSubjectBuilder::new().scheduler(SchedulerType::Blocking).build();
     let list = Arc::new(Mutex::new(Vec::new()));
     let cloned = list.clone();
     let (tx, rx) = std::sync::mpsc::channel();

@@ -11,6 +11,6 @@ pub mod buffer;
 pub mod executor;
 pub mod runtime;
 pub mod spinlock;
-pub mod threadpool;
 pub(crate) mod task;
+pub mod threadpool;
 pub mod worker;

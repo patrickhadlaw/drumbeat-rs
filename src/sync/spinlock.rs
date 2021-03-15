@@ -1,7 +1,7 @@
-use std::sync::atomic::{fence, AtomicBool, Ordering};
 use std::cell::{Cell, UnsafeCell};
-use std::sync::{LockResult, PoisonError};
 use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{fence, AtomicBool, Ordering};
+use std::sync::{LockResult, PoisonError};
 
 use rand::distributions::{Distribution, Uniform};
 
@@ -18,7 +18,7 @@ pub struct SpinLockGuard<'a, T> {
   lock: &'a SpinLock<T>,
 }
 
-impl <'a, T> Drop for SpinLockGuard<'a, T> {
+impl<'a, T> Drop for SpinLockGuard<'a, T> {
   fn drop(&mut self) {
     if std::thread::panicking() {
       unsafe { *self.lock.poisoned.as_ptr() = true };
@@ -29,7 +29,7 @@ impl <'a, T> Drop for SpinLockGuard<'a, T> {
   }
 }
 
-impl <'a, T> Deref for SpinLockGuard<'a, T> {
+impl<'a, T> Deref for SpinLockGuard<'a, T> {
   type Target = T;
 
   fn deref(&self) -> &Self::Target {
@@ -37,16 +37,16 @@ impl <'a, T> Deref for SpinLockGuard<'a, T> {
   }
 }
 
-impl <'a, T> DerefMut for SpinLockGuard<'a, T> {
+impl<'a, T> DerefMut for SpinLockGuard<'a, T> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     unsafe { &mut *self.lock.inner.get() }
   }
 }
 
-impl <T> !Send for SpinLockGuard<'_, T> {}
-unsafe impl <T: Sync> Sync for SpinLockGuard<'_, T> {}
+impl<T> !Send for SpinLockGuard<'_, T> {}
+unsafe impl<T: Sync> Sync for SpinLockGuard<'_, T> {}
 
-impl <T> SpinLock<T> {
+impl<T> SpinLock<T> {
   pub fn new(value: T) -> Self {
     SpinLock {
       flag: AtomicBool::new(false),
@@ -76,13 +76,9 @@ impl <T> SpinLock<T> {
     }
     fence(Ordering::Acquire);
     if unsafe { *self.poisoned.as_ptr() } {
-      LockResult::Err(PoisonError::new(SpinLockGuard {
-        lock: self,
-      }))
+      LockResult::Err(PoisonError::new(SpinLockGuard { lock: self }))
     } else {
-      LockResult::Ok(SpinLockGuard {
-        lock: self,
-      })
+      LockResult::Ok(SpinLockGuard { lock: self })
     }
   }
 
