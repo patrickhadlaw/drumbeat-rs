@@ -13,11 +13,7 @@ impl Subscription {
   pub(super) fn new(subscriber: Weak<dyn Owner>) -> Self {
     Subscription {
       subscriber: subscriber.clone(),
-      _scheduler: if let Some(subscriber) = subscriber.upgrade() {
-        Some(subscriber.scheduler())
-      } else {
-        None
-      },
+      _scheduler: subscriber.upgrade().map(|subscriber| subscriber.scheduler()),
     }
   }
 
