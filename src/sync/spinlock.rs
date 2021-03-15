@@ -1,14 +1,18 @@
-#![feature(negative_impls)]
 use std::sync::atomic::{fence, AtomicBool, Ordering};
 use std::cell::{Cell, UnsafeCell};
 use std::sync::{LockResult, PoisonError};
 use std::ops::{Deref, DerefMut};
+
+use rand::distributions::{Distribution, Uniform};
 
 pub struct SpinLock<T> {
   flag: AtomicBool,
   poisoned: Cell<bool>,
   inner: UnsafeCell<T>,
 }
+
+unsafe impl<T: Send> Send for SpinLock<T> {}
+unsafe impl<T: Send> Sync for SpinLock<T> {}
 
 pub struct SpinLockGuard<'a, T> {
   lock: &'a SpinLock<T>,
@@ -34,7 +38,7 @@ impl <'a, T> Deref for SpinLockGuard<'a, T> {
 }
 
 impl <'a, T> DerefMut for SpinLockGuard<'a, T> {
-  fn deref_mut(&mut self) -> &mut T {
+  fn deref_mut(&mut self) -> &mut Self::Target {
     unsafe { &mut *self.lock.inner.get() }
   }
 }
@@ -51,13 +55,24 @@ impl <T> SpinLock<T> {
     }
   }
 
-  pub fn lock(&self) -> LockResult<SpinLockGuard<'_, T>> {
-    while self
+  unsafe fn try_lock(&self) -> bool {
+    self
       .flag
       .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
       .unwrap()
-    {
-      std::hint::spin_loop();
+  }
+
+  pub fn lock(&self) -> LockResult<SpinLockGuard<'_, T>> {
+    if !unsafe { self.try_lock() } {
+      let backoff = 1u32;
+      let mut rng = rand::thread_rng();
+      while unsafe { self.try_lock() } {
+        backoff = std::cmp::min(10, backoff + 1);
+        let uniform = Uniform::from(0..(2u32.pow(backoff) - 1));
+        for i in 0..uniform.sample(&mut rng) {
+          std::hint::spin_loop();
+        }
+      }
     }
     fence(Ordering::Acquire);
     if *self.poisoned.as_ptr() {

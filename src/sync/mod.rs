@@ -9,6 +9,7 @@
 //! scheduled.
 pub mod buffer;
 pub mod runtime;
-mod spinlock;
+pub mod spinlock;
 pub mod threadpool;
+pub(crate) mod task;
 pub mod worker;
