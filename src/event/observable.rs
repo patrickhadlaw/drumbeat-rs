@@ -1,6 +1,4 @@
-use super::dispatcher::{
-  replicate, DispatchTarget, Dispatcher, DispatcherType, Invoker, ReplayDispatcher, SubscriptionDispatcher,
-};
+use super::dispatcher::{replicate, DispatchTarget, Dispatcher, DispatcherType, Invoker, SubscriptionDispatcher};
 use super::scheduler::{make_scheduler, Scheduler, SchedulerType};
 use super::subscription::Subscription;
 use crate::sync::threadpool::Task;
