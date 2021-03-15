@@ -20,7 +20,7 @@ where
       inner: SpinLock::new(RingBufferInner {
         front: 0,
         filled: false,
-        raw: Vec::new(),
+        raw: Vec::with_capacity(size),
       }),
       size,
     }
@@ -35,7 +35,8 @@ where
     if guard.raw.len() < self.size {
       guard.raw.push(value);
     } else {
-      guard.raw[guard.front] = value;
+      let idx = guard.front;
+      guard.raw[idx] = value;
     }
     guard.front = (guard.front + 1) % self.size;
     if guard.front == 0 {
@@ -82,8 +83,7 @@ where
       return Vec::new();
     }
     let guard = self.inner.lock().unwrap();
-    let result = self.get_critical(&guard, num);
-    result
+    unsafe { self.get_critical(&guard, num) }
   }
 
   pub fn get_and_do<F>(&self, num: usize, task: F) -> Vec<T>
@@ -94,7 +94,7 @@ where
       return Vec::new();
     }
     let guard = self.inner.lock().unwrap();
-    let result = self.get_critical(&guard, num);
+    let result = unsafe { self.get_critical(&guard, num) };
     task();
     result
   }
@@ -116,10 +116,8 @@ mod test {
   fn new_ring_buffer_test() {
     let ring = RingBuffer::<()>::new(5);
     assert_eq!(ring.size, 5);
-    unsafe {
-      assert_eq!(ring.inner.lock().unwrap().filled, false);
-      assert_eq!(ring.inner.lock().unwrap().front, 0);
-    }
+    assert_eq!(ring.inner.lock().unwrap().filled, false);
+    assert_eq!(ring.inner.lock().unwrap().front, 0);
   }
 
   #[test]

@@ -2,6 +2,7 @@ use super::threadpool::{Task, ThreadPool, ThreadPoolBuilder};
 
 use std::sync::Arc;
 
+// HashMap<ThreadId, AtomicBool> -> A map of threads to errors. The future will poll this map to see if the worker errored out
 pub struct Runtime;
 
 impl Runtime {

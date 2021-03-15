@@ -354,15 +354,13 @@ where
   }
 
   fn finish(&self) {
-    if let Ok(last) = self.finished.compare_exchange(
+    if self.finished.compare_exchange(
       false,
       true,
       Ordering::Relaxed,
       Ordering::Relaxed,
-    ) {
-      if !last {
-        self.pipeable.read().unwrap().finalize();
-      }
+    ).is_ok() {
+      self.pipeable.read().unwrap().finalize();
     }
   }
 

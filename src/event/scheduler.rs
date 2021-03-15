@@ -18,7 +18,7 @@ pub trait Scheduler: Send + Sync {
 
 impl Scheduler for Worker {
   fn execute(&self, task: Task) {
-    self.submit_raw(task);
+    self.submit(async move || { task.invoke() });
   }
 
   fn scheduler_type(&self) -> SchedulerType {

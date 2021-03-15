@@ -170,22 +170,20 @@ where
       .pipe()
       .first()
       .tap(move |_| {
-        if let Ok(last) = closed.compare_exchange(
+        if closed.compare_exchange(
           false,
           true,
           Ordering::Relaxed,
           Ordering::Relaxed,
-        ) {
-          if !last {
-            use super::scheduler::{Runtime, Scheduler};
-            use crate::sync::threadpool::Task;
-            let runtime = Runtime {};
-            let next = next.clone();
-            let notify_to = notify_to.clone();
-            runtime.execute(Task::new(move || {
-              next.write().unwrap().remove_child(notify_to.id());
-            }));
-          }
+        ).is_ok() {
+          use super::scheduler::{Runtime, Scheduler};
+          use crate::sync::threadpool::Task;
+          let runtime = Runtime {};
+          let next = next.clone();
+          let notify_to = notify_to.clone();
+          runtime.execute(Task::new(move || {
+            next.write().unwrap().remove_child(notify_to.id());
+          }));
         }
       })
       .observe();
@@ -250,17 +248,15 @@ where
         observable,
         Invoker::new(Arc::new(move |x| {
           let good = predicate(x.clone());
-          if let Ok(last) = finished.compare_exchange(
+          if finished.compare_exchange(
             false,
             !good,
             Ordering::Relaxed,
             Ordering::Relaxed,
-          ) {
-            if !last {
-              cloned.next(x);
-              if !good {
-                return Signal::Recycle(cloned.id());
-              }
+          ).is_ok() {
+            cloned.next(x);
+            if !good {
+              return Signal::Recycle(cloned.id());
             }
           }
           Signal::None
@@ -619,7 +615,7 @@ where
         .unwrap();
     });
     let rx = Mutex::new(rx);
-    worker.submit(move || {
+    worker.submit(async move || {
       let mut value: Option<T> = None;
       let mut last_time = SystemTime::now();
       let mut wait_for = Duration::from_secs(u64::MAX);

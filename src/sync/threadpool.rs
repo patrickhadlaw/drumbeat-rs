@@ -139,8 +139,9 @@ impl ThreadPool {
         }
       };
       *guard = ThreadPoolStatus::Pending(count + 1);
+      self.shared.signal.1.notify_one();
+
     }
-    self.shared.signal.1.notify_one();
   }
 
   /// Returns true if pool has completed all jobs and is standing idle

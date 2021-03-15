@@ -21,7 +21,7 @@ pub struct SpinLockGuard<'a, T> {
 impl <'a, T> Drop for SpinLockGuard<'a, T> {
   fn drop(&mut self) {
     if std::thread::panicking() {
-      *self.lock.poisoned.as_ptr() = true;
+      unsafe { *self.lock.poisoned.as_ptr() = true };
     }
     unsafe {
       self.lock.unlock();
@@ -59,23 +59,23 @@ impl <T> SpinLock<T> {
     self
       .flag
       .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
-      .unwrap()
+      .is_ok()
   }
 
   pub fn lock(&self) -> LockResult<SpinLockGuard<'_, T>> {
     if !unsafe { self.try_lock() } {
-      let backoff = 1u32;
+      let mut backoff = 1u32;
       let mut rng = rand::thread_rng();
       while unsafe { self.try_lock() } {
         backoff = std::cmp::min(10, backoff + 1);
         let uniform = Uniform::from(0..(2u32.pow(backoff) - 1));
-        for i in 0..uniform.sample(&mut rng) {
+        for _ in 0..uniform.sample(&mut rng) {
           std::hint::spin_loop();
         }
       }
     }
     fence(Ordering::Acquire);
-    if *self.poisoned.as_ptr() {
+    if unsafe { *self.poisoned.as_ptr() } {
       LockResult::Err(PoisonError::new(SpinLockGuard {
         lock: self,
       }))
