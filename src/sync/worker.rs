@@ -9,8 +9,6 @@ use std::thread::JoinHandle;
 
 pub type WorkerResult<T> = Result<T, TaskError>;
 
-// panic if submit on non healthy worker
-
 pub struct HealthUnwinder<'a, T>
 where
   T: TaskType,
@@ -126,6 +124,8 @@ where
   /// - Tasks are guaranteed to be run as long as the worker remains healthy, when the `Worker` instance is
   /// dropped the dropping thread signals the worker to close. Once the worker
   /// receives this signal it quits its thread loop.
+  /// - During an unhandled panic the worker will attempt to mark all tasks in the queue as failed with an error of
+  /// [TaskError::Unhealthy](TaskError::Unhealthy).
   ///
   /// # Panics
   ///
@@ -133,16 +133,17 @@ where
   ///
   /// # Example
   /// ```
+  /// #![feature(async_closure)]
   /// use drumbeat::sync::worker::Worker;
   /// use std::sync::{Arc, atomic::{AtomicU16, Ordering}};
   ///
   /// let atomic = Arc::new(AtomicU16::new(0));
-  /// {
-  ///   let worker = Worker::new();
-  ///   let (copy1, copy2) = (atomic.clone(), atomic.clone());
-  ///   worker.submit(move || { copy1.fetch_add(10, Ordering::Relaxed); });
-  ///   worker.submit(move || { copy2.fetch_add(5, Ordering::Relaxed); });
-  /// }
+  /// let worker = Worker::new();
+  /// let (copy1, copy2) = (atomic.clone(), atomic.clone());
+  /// let task1 = worker.submit(async move || { copy1.fetch_add(10, Ordering::Relaxed); });
+  /// let task2 = worker.submit(async move || { copy2.fetch_add(5, Ordering::Relaxed); });
+  /// task1.wait();
+  /// task2.wait();
   /// assert_eq!(atomic.load(Ordering::Relaxed), 15);
   /// ```
   pub fn submit<F>(&self, job: impl FnOnce() -> F) -> Arc<Task<T>>
@@ -222,11 +223,11 @@ mod test {
   #[test]
   fn worker_healthy_task_test() {
     async_context(|| {
-      let (worker, handle) = Worker::<()>::new_with_handle();
-      let task = worker.submit(async || {});
+      let (worker, handle) = Worker::<u32>::new_with_handle();
+      let task = worker.submit(async || 20);
       worker.inner.sender.lock().unwrap().send(WorkerSignal::Close).unwrap();
       assert!(handle.join().is_ok());
-      assert_eq!(task.poll(), Ok(()));
+      assert_eq!(task.poll(), Ok(20));
     });
   }
 

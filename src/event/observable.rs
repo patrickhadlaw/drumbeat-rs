@@ -1,4 +1,6 @@
-use super::dispatcher::{replicate, DispatchTarget, Dispatcher, DispatcherType, Invoker, SubscriptionDispatcher};
+use super::dispatcher::{
+  replicate, DispatchTarget, Dispatcher, DispatcherType, Invoker, ReplayDispatcher, SubscriptionDispatcher,
+};
 use super::scheduler::{make_scheduler, Scheduler, SchedulerType};
 use super::subscription::Subscription;
 use crate::sync::threadpool::Task;
@@ -446,13 +448,12 @@ where
     match self.strategy {
       ObservableStrategy::Of(list) => {
         let observable = Observable::new(id, None, dispatcher, scheduler.clone());
-        for x in list.iter() {
-          let value = x.clone();
-          let cloned = observable.clone();
-          scheduler.execute(Task::new(move || {
-            cloned.next(value.clone());
-          }));
-        }
+        let cloned = observable.clone();
+        scheduler.execute(Task::new(move || {
+          for x in list.iter() {
+            cloned.next(x.clone());
+          }
+        }));
         observable
       }
       ObservableStrategy::Merge(owners) => Funnel::new(owners, id, scheduler, dispatcher).1,
@@ -793,6 +794,7 @@ mod test {
         assert!(funnel.upgrade().is_some());
         (funnel, into)
       };
+      std::thread::sleep(std::time::Duration::from_millis(20));
       assert!(funnel.upgrade().is_none());
     });
   }
