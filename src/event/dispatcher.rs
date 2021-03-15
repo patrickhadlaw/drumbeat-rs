@@ -1,6 +1,4 @@
-use super::observable::{
-  DummyOwner, Observable, ObservableType, Owner, Signal,
-};
+use super::observable::{DummyOwner, Observable, ObservableType, Owner, Signal};
 use crate::sync::buffer::RingBuffer;
 use crate::sync::threadpool::Task;
 
@@ -57,9 +55,7 @@ where
 {
   match dispatch_type {
     DispatcherType::Basic => Box::new(BasicDispatcher::new()),
-    DispatcherType::Replay(size) => {
-      Box::new(ReplayDispatcher::new(size, false))
-    }
+    DispatcherType::Replay(size) => Box::new(ReplayDispatcher::new(size, false)),
   }
 }
 
@@ -92,10 +88,7 @@ where
 }
 
 #[derive(Clone)]
-pub(super) struct DispatchTarget<T>(
-  pub(super) Arc<dyn Owner>,
-  pub(super) Invoker<T>,
-)
+pub(super) struct DispatchTarget<T>(pub(super) Arc<dyn Owner>, pub(super) Invoker<T>)
 where
   T: ObservableType;
 
@@ -358,16 +351,9 @@ where
   }
 
   fn bootstrap(&self, child: usize) -> Option<Task> {
-    if let Some(target) = self
-      .base
-      .children
-      .iter()
-      .find(|target| target.0.id() == child)
-    {
+    if let Some(target) = self.base.children.iter().find(|target| target.0.id() == child) {
       let cloned = target.0.clone();
-      let replay = self
-        .buffer
-        .get_and_do(self.buffer.size(), move || cloned.initialize());
+      let replay = self.buffer.get_and_do(self.buffer.size(), move || cloned.initialize());
       if let Some(owner) = self.owner() {
         let cloned = target.1.clone();
         return Some(Task::new(move || {

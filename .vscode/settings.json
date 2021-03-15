@@ -1,4 +1,4 @@
 {
   "debug.allowBreakpointsEverywhere": true,
-  "editor.rulers": [80,120]
+  "editor.rulers": [100,120]
 }

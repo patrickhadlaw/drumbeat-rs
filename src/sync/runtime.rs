@@ -2,13 +2,13 @@ use super::threadpool::{Task, ThreadPool, ThreadPoolBuilder};
 
 use std::sync::Arc;
 
+// HashMap<ThreadId, AtomicBool> -> A map of threads to errors. The future will poll this map to see if the worker errored out
 pub struct Runtime;
 
 impl Runtime {
   fn get() -> Arc<ThreadPool> {
     lazy_static! {
-      static ref POOL: Arc<ThreadPool> =
-        Arc::new(ThreadPoolBuilder::named("runtime".to_owned()).build());
+      static ref POOL: Arc<ThreadPool> = Arc::new(ThreadPoolBuilder::named("runtime".to_owned()).build());
     }
     POOL.clone()
   }

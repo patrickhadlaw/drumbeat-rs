@@ -8,7 +8,9 @@
 //! of execution is important so there should be a choice in how things are
 //! scheduled.
 pub mod buffer;
+pub mod executor;
 pub mod runtime;
-mod spinlock;
+pub mod spinlock;
+pub(crate) mod task;
 pub mod threadpool;
 pub mod worker;

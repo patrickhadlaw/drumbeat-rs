@@ -1,7 +1,5 @@
 use super::dispatcher::{create, DispatcherType};
-use super::observable::{
-  DummyOwner, Observable, ObservableType, Owner, Signal,
-};
+use super::observable::{DummyOwner, Observable, ObservableType, Owner, Signal};
 use super::scheduler::{make_scheduler, Scheduler, SchedulerType};
 use crate::sync::threadpool::Task;
 
@@ -84,10 +82,7 @@ impl<T> SubjectBase<T>
 where
   T: ObservableType,
 {
-  pub(super) fn new(
-    strategy: SchedulerType,
-    dispatch_type: DispatcherType,
-  ) -> Self {
+  pub(super) fn new(strategy: SchedulerType, dispatch_type: DispatcherType) -> Self {
     let id = super::observable::id();
     SubjectBase {
       id,
@@ -473,9 +468,7 @@ mod test {
 
   #[test]
   fn basic_subject_new_pool_test() {
-    let basic = BasicSubjectBuilder::new()
-      .scheduler(SchedulerType::Pool)
-      .build::<()>();
+    let basic = BasicSubjectBuilder::new().scheduler(SchedulerType::Pool).build::<()>();
     let read_guard = basic.base.manager.read().unwrap();
     assert!(read_guard.subject.upgrade().is_some());
     assert_eq!(read_guard.scheduler.scheduler_type(), SchedulerType::Pool);
@@ -488,10 +481,7 @@ mod test {
       .build::<()>();
     let read_guard = basic.base.manager.read().unwrap();
     assert!(read_guard.subject.upgrade().is_some());
-    assert_eq!(
-      read_guard.scheduler.scheduler_type(),
-      SchedulerType::Runtime
-    );
+    assert_eq!(read_guard.scheduler.scheduler_type(), SchedulerType::Runtime);
   }
 
   #[test]
@@ -501,10 +491,7 @@ mod test {
       .build::<()>();
     let read_guard = basic.base.manager.read().unwrap();
     assert!(read_guard.subject.upgrade().is_some());
-    assert_eq!(
-      read_guard.scheduler.scheduler_type(),
-      SchedulerType::Blocking
-    );
+    assert_eq!(read_guard.scheduler.scheduler_type(), SchedulerType::Blocking);
   }
 
   #[test]
@@ -538,10 +525,7 @@ mod test {
       .build::<()>();
     let read_guard = queuing.base.manager.read().unwrap();
     assert!(read_guard.subject.upgrade().is_some());
-    assert_eq!(
-      read_guard.scheduler.scheduler_type(),
-      SchedulerType::Runtime
-    );
+    assert_eq!(read_guard.scheduler.scheduler_type(), SchedulerType::Runtime);
   }
 
   #[test]
@@ -551,18 +535,13 @@ mod test {
       .build::<()>();
     let read_guard = queuing.base.manager.read().unwrap();
     assert!(read_guard.subject.upgrade().is_some());
-    assert_eq!(
-      read_guard.scheduler.scheduler_type(),
-      SchedulerType::Blocking
-    );
+    assert_eq!(read_guard.scheduler.scheduler_type(), SchedulerType::Blocking);
   }
 
   #[test]
   fn queuing_subject_push_flush_test() {
     async_context(|| {
-      let subject = QueuingSubjectBuilder::new()
-        .scheduler(SchedulerType::Blocking)
-        .build();
+      let subject = QueuingSubjectBuilder::new().scheduler(SchedulerType::Blocking).build();
       let count = Arc::new(AtomicIsize::new(0));
       let clone = count.clone();
       let _subscription = subject.observe().pipe().subscribe(move |_| {

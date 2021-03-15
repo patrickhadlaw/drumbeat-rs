@@ -37,10 +37,7 @@ fn main() {
       .pipe()
       .map(|x| EventType::EventA(x.unwrap().pow(2)))
       .observe(),
-    b.observe()
-      .pipe()
-      .map(|x| EventType::EventB(x.unwrap() * 3))
-      .observe(),
+    b.observe().pipe().map(|x| EventType::EventB(x.unwrap() * 3)).observe(),
   ]);
   let rx = merge.pipe().tap(|x| println!("{}", x)).take(6).collect();
   // Since a, b and merge are using the default worker scheduler, the following

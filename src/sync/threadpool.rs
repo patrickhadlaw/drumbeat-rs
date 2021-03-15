@@ -17,9 +17,7 @@ impl Task {
   where
     F: Fn() + Send + Sync + 'static,
   {
-    Task {
-      func: Box::new(func),
-    }
+    Task { func: Box::new(func) }
   }
 
   pub fn invoke(self) {
@@ -139,15 +137,14 @@ impl ThreadPool {
         }
       };
       *guard = ThreadPoolStatus::Pending(count + 1);
+      self.shared.signal.1.notify_one();
     }
-    self.shared.signal.1.notify_one();
   }
 
   /// Returns true if pool has completed all jobs and is standing idle
   pub fn done(&self) -> bool {
     let _guard = self.shared.signal.0.lock().unwrap();
-    self.shared.running_count.load(Ordering::Relaxed) == 0
-      && self.shared.jobs.lock().unwrap().is_empty()
+    self.shared.running_count.load(Ordering::Relaxed) == 0 && self.shared.jobs.lock().unwrap().is_empty()
   }
 
   fn worker(name: String, shared: Arc<SharedData>) -> JoinHandle<()> {

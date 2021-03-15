@@ -1,7 +1,4 @@
-use super::dispatcher::{
-  replicate, DispatchTarget, Dispatcher, DispatcherType, Invoker,
-  SubscriptionDispatcher,
-};
+use super::dispatcher::{replicate, DispatchTarget, Dispatcher, DispatcherType, Invoker, SubscriptionDispatcher};
 use super::scheduler::{make_scheduler, Scheduler, SchedulerType};
 use super::subscription::Subscription;
 use crate::sync::threadpool::Task;
@@ -126,11 +123,7 @@ impl<T> Pipe<T>
 where
   T: ObservableType,
 {
-  fn new(
-    destination: Option<Pipeable<T>>,
-    next: Pipeable<T>,
-    resolver: Option<PipeResolver>,
-  ) -> Self {
+  fn new(destination: Option<Pipeable<T>>, next: Pipeable<T>, resolver: Option<PipeResolver>) -> Self {
     Pipe {
       destination,
       next,
@@ -139,11 +132,7 @@ where
     }
   }
 
-  pub(super) fn attach<A>(
-    &mut self,
-    observable: Arc<Observable<A>>,
-    target: DispatchTarget<T>,
-  ) -> Pipe<A>
+  pub(super) fn attach<A>(&mut self, observable: Arc<Observable<A>>, target: DispatchTarget<T>) -> Pipe<A>
   where
     A: ObservableType,
   {
@@ -170,11 +159,7 @@ where
 
   pub(super) fn forward(&mut self) -> Self {
     self.dead = true;
-    Pipe::new(
-      self.destination.clone(),
-      self.next.clone(),
-      self.resolver.clone(),
-    )
+    Pipe::new(self.destination.clone(), self.next.clone(), self.resolver.clone())
   }
 
   pub(super) fn instantiate(&self) {
@@ -235,10 +220,7 @@ where
     let observable = self.make_observer();
     let pipe = self.attach(
       observable.clone(),
-      DispatchTarget::new(
-        observable.clone(),
-        Invoker::identity(observable.clone()),
-      ),
+      DispatchTarget::new(observable.clone(), Invoker::identity(observable.clone())),
     );
     pipe.instantiate();
     observable
@@ -279,20 +261,15 @@ where
     let observable = Observable::<T>::new(
       id(),
       Some(owner.clone()),
-      Box::new(SubscriptionDispatcher::new(Invoker::new(Arc::new(
-        move |x| {
-          consumer(x);
-          Signal::None
-        },
-      )))),
+      Box::new(SubscriptionDispatcher::new(Invoker::new(Arc::new(move |x| {
+        consumer(x);
+        Signal::None
+      })))),
       owner.scheduler(),
     );
     let pipe = self.attach(
       observable.clone(),
-      DispatchTarget::new(
-        observable.clone(),
-        Invoker::identity(observable.clone()),
-      ),
+      DispatchTarget::new(observable.clone(), Invoker::identity(observable.clone())),
     );
     pipe.instantiate();
     Subscription::new(Arc::downgrade(&observable) as Weak<dyn Owner>)
@@ -307,11 +284,7 @@ where
   where
     F: Fn() + Send + Sync + 'static,
   {
-    self
-      .next
-      .read()
-      .unwrap()
-      .add_finalize(Task::new(Box::new(task)));
+    self.next.read().unwrap().add_finalize(Task::new(Box::new(task)));
     let observable = self.make_observer();
     self.attach(
       observable.clone(),
@@ -354,15 +327,12 @@ where
   }
 
   fn finish(&self) {
-    if let Ok(last) = self.finished.compare_exchange(
-      false,
-      true,
-      Ordering::Relaxed,
-      Ordering::Relaxed,
-    ) {
-      if !last {
-        self.pipeable.read().unwrap().finalize();
-      }
+    if self
+      .finished
+      .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+      .is_ok()
+    {
+      self.pipeable.read().unwrap().finalize();
     }
   }
 
@@ -475,20 +445,16 @@ where
     let dispatcher = super::dispatcher::create(self.dispatcher);
     match self.strategy {
       ObservableStrategy::Of(list) => {
-        let observable =
-          Observable::new(id, None, dispatcher, scheduler.clone());
-        for x in list.iter() {
-          let value = x.clone();
-          let cloned = observable.clone();
-          scheduler.execute(Task::new(move || {
-            cloned.next(value.clone());
-          }));
-        }
+        let observable = Observable::new(id, None, dispatcher, scheduler.clone());
+        let cloned = observable.clone();
+        scheduler.execute(Task::new(move || {
+          for x in list.iter() {
+            cloned.next(x.clone());
+          }
+        }));
         observable
       }
-      ObservableStrategy::Merge(owners) => {
-        Funnel::new(owners, id, scheduler, dispatcher).1
-      }
+      ObservableStrategy::Merge(owners) => Funnel::new(owners, id, scheduler, dispatcher).1,
     }
   }
 }
@@ -702,11 +668,7 @@ where
   }
 
   fn owner(&self) -> Option<Arc<dyn Owner>> {
-    self
-      .owners
-      .iter()
-      .map(|x| x.upgrade())
-      .find(|x| x.is_some())?
+    self.owners.iter().map(|x| x.upgrade()).find(|x| x.is_some())?
   }
 }
 
@@ -720,33 +682,25 @@ where
     scheduler: Arc<dyn Scheduler>,
     dispatcher: Box<dyn Dispatcher<T>>,
   ) -> (Arc<Self>, Arc<Observable<T>>) {
-    let downgrade = owners
-      .iter()
-      .map(|x| Arc::downgrade(&x) as Weak<dyn Owner>)
-      .collect();
+    let downgrade = owners.iter().map(|x| Arc::downgrade(&x) as Weak<dyn Owner>).collect();
     let funnel = Arc::new(Funnel {
       id: id(),
       owners: downgrade,
       target: RwLock::new(None),
       finished: AtomicBool::new(false),
     });
-    let observable =
-      Observable::new(child_id, Some(funnel.clone()), dispatcher, scheduler);
+    let observable = Observable::new(child_id, Some(funnel.clone()), dispatcher, scheduler);
     *funnel.target.write().unwrap() = Some(observable.clone());
     for owner in owners.iter() {
       let capture = funnel.clone();
       let owner_weak = Arc::downgrade(owner);
-      owner
-        .pipeable
-        .write()
-        .unwrap()
-        .add_child(DispatchTarget::new(
-          funnel.clone(),
-          Invoker::new(Arc::new(move |x| {
-            capture.next(x, owner_weak.clone());
-            Signal::None
-          })),
-        ));
+      owner.pipeable.write().unwrap().add_child(DispatchTarget::new(
+        funnel.clone(),
+        Invoker::new(Arc::new(move |x| {
+          capture.next(x, owner_weak.clone());
+          Signal::None
+        })),
+      ));
     }
     (funnel, observable)
   }
@@ -785,16 +739,12 @@ pub mod testing {
   use crate::event::dispatcher::{create, DispatcherType};
   use crate::event::scheduler::{make_scheduler, SchedulerType};
 
-  pub fn mock_observable<T>(
-    strategy: SchedulerType,
-    dispatcher: DispatcherType,
-  ) -> Arc<Observable<T>>
+  pub fn mock_observable<T>(strategy: SchedulerType, dispatcher: DispatcherType) -> Arc<Observable<T>>
   where
     T: ObservableType,
   {
     let id = id();
-    let scheduler =
-      make_scheduler("observable".to_owned(), id.clone(), strategy);
+    let scheduler = make_scheduler("observable".to_owned(), id.clone(), strategy);
     Observable::new(id, None, create(dispatcher), scheduler)
   }
 }
@@ -824,11 +774,8 @@ mod test {
   fn funnel_new_test() {
     crate::utils::testing::async_context(|| {
       let (funnel, _into) = {
-        let observables: Vec<Arc<Observable<()>>> = vec![
-          Observable::of(vec![]),
-          Observable::of(vec![]),
-          Observable::of(vec![]),
-        ];
+        let observables: Vec<Arc<Observable<()>>> =
+          vec![Observable::of(vec![]), Observable::of(vec![]), Observable::of(vec![])];
         let (funnel, into) = {
           let (funnel, observable) = Funnel::new(
             observables.clone(),
@@ -845,6 +792,7 @@ mod test {
         assert!(funnel.upgrade().is_some());
         (funnel, into)
       };
+      std::thread::sleep(std::time::Duration::from_millis(20));
       assert!(funnel.upgrade().is_none());
     });
   }
@@ -852,11 +800,8 @@ mod test {
   #[test]
   fn funnel_target_unsubscribe_test() {
     crate::utils::testing::async_context(|| {
-      let observables: Vec<Arc<Observable<()>>> = vec![
-        Observable::of(vec![]),
-        Observable::of(vec![]),
-        Observable::of(vec![]),
-      ];
+      let observables: Vec<Arc<Observable<()>>> =
+        vec![Observable::of(vec![]), Observable::of(vec![]), Observable::of(vec![])];
       let (funnel, into) = {
         let (funnel, observable) = Funnel::new(
           observables.clone(),

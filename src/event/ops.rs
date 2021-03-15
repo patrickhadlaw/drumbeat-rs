@@ -170,22 +170,18 @@ where
       .pipe()
       .first()
       .tap(move |_| {
-        if let Ok(last) = closed.compare_exchange(
-          false,
-          true,
-          Ordering::Relaxed,
-          Ordering::Relaxed,
-        ) {
-          if !last {
-            use super::scheduler::{Runtime, Scheduler};
-            use crate::sync::threadpool::Task;
-            let runtime = Runtime {};
-            let next = next.clone();
-            let notify_to = notify_to.clone();
-            runtime.execute(Task::new(move || {
-              next.write().unwrap().remove_child(notify_to.id());
-            }));
-          }
+        if closed
+          .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+          .is_ok()
+        {
+          use super::scheduler::{Runtime, Scheduler};
+          use crate::sync::threadpool::Task;
+          let runtime = Runtime {};
+          let next = next.clone();
+          let notify_to = notify_to.clone();
+          runtime.execute(Task::new(move || {
+            next.write().unwrap().remove_child(notify_to.id());
+          }));
         }
       })
       .observe();
@@ -250,17 +246,13 @@ where
         observable,
         Invoker::new(Arc::new(move |x| {
           let good = predicate(x.clone());
-          if let Ok(last) = finished.compare_exchange(
-            false,
-            !good,
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-          ) {
-            if !last {
-              cloned.next(x);
-              if !good {
-                return Signal::Recycle(cloned.id());
-              }
+          if finished
+            .compare_exchange(false, !good, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+          {
+            cloned.next(x);
+            if !good {
+              return Signal::Recycle(cloned.id());
             }
           }
           Signal::None
@@ -457,12 +449,7 @@ where
         })),
       ),
     );
-    let pipe = pipe.finalize(move || {
-      tx.lock()
-        .unwrap()
-        .send(cloned.lock().unwrap().clone())
-        .unwrap()
-    });
+    let pipe = pipe.finalize(move || tx.lock().unwrap().send(cloned.lock().unwrap().clone()).unwrap());
     pipe.instantiate();
     rx
   }
@@ -578,12 +565,12 @@ where
   ///   .pipe()
   ///   .take(100)
   ///   .assert_count(100)
-  ///   .debounce_for(Duration::from_millis(100))
+  ///   .debounce_for(Duration::from_millis(400))
   ///   .collect();
   /// for i in 0..100 {
   ///   subject.next(i);
   ///   if i == 50 {
-  ///     std::thread::sleep(Duration::from_millis(150));
+  ///     std::thread::sleep(Duration::from_millis(500));
   ///   }
   /// }
   /// assert_eq!(rx.recv().unwrap(), [50]);
@@ -612,14 +599,10 @@ where
     let (tx, rx) = std::sync::mpsc::channel();
     let finalize = Mutex::new(tx.clone());
     self.finalize(move || {
-      finalize
-        .lock()
-        .unwrap()
-        .send(DebounceCommand::Finish)
-        .unwrap();
+      finalize.lock().unwrap().send(DebounceCommand::Finish).unwrap();
     });
     let rx = Mutex::new(rx);
-    worker.submit(move || {
+    worker.submit(async move || {
       let mut value: Option<T> = None;
       let mut last_time = SystemTime::now();
       let mut wait_for = Duration::from_secs(u64::MAX);
@@ -818,10 +801,7 @@ mod test {
   #[test]
   fn assert_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable::<()>(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable::<()>(SchedulerType::Blocking, DispatcherType::Basic);
       observable.pipe().assert(|_| true).dangling();
       observable.next(());
     });
@@ -831,10 +811,7 @@ mod test {
   #[should_panic]
   fn assert_panic_test() {
     utils::testing::async_panic_context(|| {
-      let observable = observable::testing::mock_observable::<()>(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable::<()>(SchedulerType::Blocking, DispatcherType::Basic);
       observable.pipe().assert(|_| false).dangling();
       observable.next(());
     });
@@ -843,10 +820,7 @@ mod test {
   #[test]
   fn assert_count_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable::<()>(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable::<()>(SchedulerType::Blocking, DispatcherType::Basic);
       observable.pipe().assert_count(3).dangling();
       observable.next(());
       observable.next(());
@@ -858,10 +832,7 @@ mod test {
   #[should_panic]
   fn assert_count_panic_test() {
     utils::testing::async_panic_context(|| {
-      let observable = observable::testing::mock_observable::<()>(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable::<()>(SchedulerType::Blocking, DispatcherType::Basic);
       observable.pipe().assert_count(3).dangling();
       observable.next(());
     });
@@ -870,10 +841,7 @@ mod test {
   #[test]
   fn tap_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
       let count = Arc::new(AtomicUsize::new(0));
       let cloned = count.clone();
       observable
@@ -893,16 +861,8 @@ mod test {
   #[test]
   fn debounce_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
-      let rx = observable
-        .pipe()
-        .take(100)
-        .assert_count(100)
-        .debounce()
-        .collect();
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
+      let rx = observable.pipe().take(100).assert_count(100).debounce().collect();
       for i in 0..100 {
         observable.next(i);
         if i == 50 {
@@ -916,10 +876,7 @@ mod test {
   #[test]
   fn map_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
       observable
         .pipe()
         .map(|x| format!("test_{}", x))
@@ -932,16 +889,8 @@ mod test {
   #[test]
   fn take_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
-      observable
-        .pipe()
-        .take(3)
-        .assert(|x| x <= 3)
-        .assert_count(3)
-        .dangling();
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
+      observable.pipe().take(3).assert(|x| x <= 3).assert_count(3).dangling();
       observable.next(1);
       observable.next(2);
       observable.next(3);
@@ -953,14 +902,8 @@ mod test {
   #[test]
   fn take_until_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
-      let done = observable::testing::mock_observable::<()>(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
+      let done = observable::testing::mock_observable::<()>(SchedulerType::Blocking, DispatcherType::Basic);
       observable
         .pipe()
         .take_until(done.clone())
@@ -980,10 +923,7 @@ mod test {
   #[test]
   fn take_while_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
       observable
         .pipe()
         .take_while(|x| x < 3)
@@ -1001,16 +941,8 @@ mod test {
   #[test]
   fn first_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
-      observable
-        .pipe()
-        .first()
-        .assert(|x| x == 1)
-        .assert_count(1)
-        .dangling();
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
+      observable.pipe().first().assert(|x| x == 1).assert_count(1).dangling();
       observable.next(1);
       assert_eq!(observable.num_children(), 0);
       observable.next(2);
@@ -1022,16 +954,8 @@ mod test {
   #[test]
   fn skip_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
-      observable
-        .pipe()
-        .skip(2)
-        .assert(|x| x > 2)
-        .assert_count(2)
-        .dangling();
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
+      observable.pipe().skip(2).assert(|x| x > 2).assert_count(2).dangling();
       observable.next(1);
       observable.next(2);
       observable.next(3);
@@ -1042,10 +966,7 @@ mod test {
   #[test]
   fn filter_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
       observable
         .pipe()
         .filter(|x| x % 3 == 0)
@@ -1064,10 +985,7 @@ mod test {
   #[test]
   fn collect_test() {
     utils::testing::async_context(|| {
-      let observable = observable::testing::mock_observable(
-        SchedulerType::Blocking,
-        DispatcherType::Basic,
-      );
+      let observable = observable::testing::mock_observable(SchedulerType::Blocking, DispatcherType::Basic);
       let rx = observable.pipe().take(3).assert_count(3).collect();
       observable.next(1);
       observable.next(2);

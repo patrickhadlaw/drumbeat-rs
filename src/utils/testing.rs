@@ -18,7 +18,10 @@ where
     .unwrap();
   match done_rx.recv_timeout(d) {
     Ok(_) => handle.join().expect("thread panicked"),
-    _ => panic!("thread took too long"),
+    Err(error) => match error {
+      mpsc::RecvTimeoutError::Timeout => panic!("thread took too long"),
+      mpsc::RecvTimeoutError::Disconnected => panic!("thread panicked"),
+    },
   }
 }
 
